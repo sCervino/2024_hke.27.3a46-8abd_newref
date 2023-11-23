@@ -1,0 +1,70 @@
+---
+title: "Calculation of reference points for Northern stock of Hake (hke.27.3a46-8abd)"
+author: Dorleta Garcia 
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+    bookdown::html_document2:
+      base_format: tint::tintHtml
+license: Creative Commons Attribution-ShareAlike 4.0 International Public License
+---
+
+```{r setup, include = FALSE}
+library(knitr)
+library(FLCore)
+
+opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  out.width="92%",
+  echo = FALSE
+)
+
+# Load data
+load('data/bootstrap.rda')
+load('data/data.rda')
+load('bootstrap/data/wgbie2023_nhke_FLStock_csim.RData')
+load('data/Biomass_refpts.rda')
+```
+
+# Stock-recruitment relationship
+First the years for the calculation of reference points were selected. For northern hake normally the last two years are removed from the calculation. In Figure we analysed the robustness of segmented regression SR to the length of the time series. We use segmented regression because when the breakpoint is well estimated it is the default for the estimation of $B_{lim}$. In this case only the inclusion of last year data, 2022, led to a difference in the estimation of most of the 'a' parameter and the inclusion of 2020 and 2021 data years led to a significant decrease in the 'b' parameter estimate, the break point (see Figure \@ref(fig:srr-ts)). For the rest of the time series the variability in the 'b' parameter estimate was lower. Thus, it was decided to consider data only up to 2019 to calculate the SR models.
+
+```{r srr-ts, fig.cap="Segmented regression stock recruitment model parameters using data from 1978 up to the year shown in the plot."}
+include_graphics("report/recruitment_segreg_Finalyr.png")
+```
+
+Beverton and Holt, Ricker and segmented regression models were fitted to observed stock-recruitment data up to 2019 (Figure \@ref(fig:srr-fit)). Ricker and segmented regression model fits gave similar fit close to the origin. Ricker model showed some depensation at high biomass levels which is consistent with the biology of the species. The breakpoint of the segmented regression model was close to 60000 tonnes. The lower AIC was obtained for the Ricker model and the highest for the segmented regression model but there were not big differences.
+
+```{r srr-fit, fig.cap="Stock recruitment models fit to historical data. The black point corresponds with the last SR point in 2019."}
+include_graphics("report/recruitment_fits.png")
+```
+
+# Definition of $B_{lim}$
+
+## SR Breakpoint
+In this section we analysed if the SR breakpoint is well estimated. First we conducted a bootstrap of the recruitment residuals an re-estimate the stock recruitment parameters. The distribution of the 'b' parameter, the breakpoint, has a wide distribution with most of the values between 49000 and 63000 tonnes (Figure \@ref(fig:breakpoint-boot)). The median of the distribution is equal to 57367 tonnes close to the deterministic value, 57908. The coefficient of variation of the distribution was equal to 20%.    
+
+```{r breakpoint-boot, fig.cap="Density distributions of the segmented regression parameters fitted to bootstraped stock recruitment residuals."}
+include_graphics("report/recruitment_segreg_breakpoint.png")
+```
+
+## B0 
+A second bootstrap was conducted were the three stock recruitment relationships were fitted and in its iteration the best one was selected. The segmented regression model was selected in 77% of the cases, Beverton and Holt in the 22% and  Ricker in a 1%. $B_0$ and $B_{msy}$ and other biomass reference levels were calculated in each of the iterations and their distributions were analysed. (Figure \@ref(fig:biomass-refpts)). The MSY biomass reference point, $B_{msy}$, is around 27% of the $B_0$ level. $F_{max}$ is close to $F_{msy}$, influenced by the high weight of the segmented regression relationship. The $F_{0.1}$ fishing mortality leads to a biomass close to 50% of $B_{msy}$.
+
+```{r biomass-refpts, fig.cap="Density distributions of several Biomass reference points."}
+include_graphics("report/Biomas_ReferencePoints.png")
+
+ratB0 <- round(100*(median(B0)/max(ssb(hke.stk))-1))
+```
+
+
+The estimated B0 is `r ratB0` % higher than the maximum SSB in the historical time series (Figure \@ref(fig:hist-biomass-refpts)). 10% of $B0$ is just above the minimum levels observed in the late 90s just before the recovery plan was implemented. The segmented regression breakpoint is between the 10% and 15% of $B0$ which is somewhat above the minimum biomass levels.  $B_{smy}$
+
+The stock recruitment pairs seem to be informative about $R_0$ in this case, as the asymptote of the segmented regression and Beverton and Holt stock recruitment models are determined by various observations (\@ref(fig:srr-fit)). Furthermore, the stock-recruitment pairs that determine the asymptote have been observed in the recent past, which suggest that this recruitment level is compatible with current ecosystem status. Thus, assuming $R_0$ is well estimated, if biological parameters, such as weight, natural mortality and maturity at age were compatible with higher biomass levels, the estimated $B_0$ would make sense in this case.      
+
+```{r hist-biomass-refpts, fig.cap="Historical time series of SSB. The horizontal lines correspond with different percentages of $B_0$, $B_{msy}$ and $B_{lim, segreg}$."}
+include_graphics("report/Historical_SSB_&_B0_Blim_Bmsy.png")
+```
+
+## Summary
+In this case, both, the segmented regression break-point and $B_{0}$
