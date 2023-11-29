@@ -8,9 +8,40 @@ output:
 license: Creative Commons Attribution-ShareAlike 4.0 International Public License
 ---
 
+<style>
+p.definition {
+background-color: #DBDBDB;
+padding: 10px;
+border: 1px solid black;
+margin-left: 25px;
+border-radius: 5px;
+font-style: italic;
+}
+
+</style>
+
+
+<style>
+p.refpt {
+background-color: #619CFF;
+padding: 10px;
+border: 1px solid black;
+margin-left: 25px;
+border-radius: 5px;
+font-style: italic;
+}
+</style>
+
+
+
+
 ```{r setup, include = FALSE}
 library(knitr)
 library(FLCore)
+library(ggpubr)
+library(flextable)
+library(tidyverse)
+
 
 opts_chunk$set(
   collapse = TRUE,
@@ -20,10 +51,44 @@ opts_chunk$set(
 )
 
 # Load data
-load('data/bootstrap.rda')
 load('data/data.rda')
+load("data/SR_analysis.rda")
 load('bootstrap/data/wgbie2023_nhke_FLStock_csim.RData')
 load('data/Biomass_refpts.rda')
+load('output/output.rda')
+load('data/brps.rda')
+# source
+source('utilities.R')
+```
+
+```{r}
+model_settings <- list(
+         initial_population_model        = c('Stock Synthesis', "1978-2022", '(ICES, 2023)', 'Best available assessment model'),
+         initial_population_uncertainty  = c('Not included', NULL, NULL, NULL),
+         recruitment_functional_form     = c('Mixed - BH, Rick, SegReg', "1978-2019", "This document", "Guidelines and year range that provides stable results"),
+               parametric_uncertainty    = c('Boostrap', "1978-2019", "This document", "The aim of the mixed recruitment model is to add both structural and parametric uncertainty"),
+                        process_error    = c('lognormal', "1978-2019", "This document", "Residuals structure"),
+                      Natural_mortality  = c('historical mean', "2022", "ICES (2022)", "Low inter-annual variability"), 
+                                Maturity = c('historical mean', "2021-2022", "ICES (2023)", "Low inter-annual variability"),
+                          Weight_at_age  = c('historical mean', "2021-2022", "ICES (2023)", "Low inter-annual variability"),
+                      Selection_pattern  = c('Boostrap of last 10 years F-at-age', "2013-2022", "ICES (2023)", "High interannual variability"),
+                               Discards  = c('Boostrap of last 10 years F-at-age', "2013-2022", "ICES (2023)", "High interannual variability"),
+                         Recruitment_mp  = c('geometric mean', "1978-(last data year-2)", "ICES (2022)", "Retrospective pattern in the last two estimates"),
+                                  SSB_cv = c('0', "-", "-", 'Default value in ICES'),
+                                    F_cv = c('0.212', "-", "-", 'Default value in ICES'),
+                                    Fphi = c('0.413', "-", "-", 'Default value in ICES'),
+                   Harvest_Control_Rules = c('ICES AR or Constant F', "-", "-", 'Calculation of reference poitns'),
+                 Implementation_error    = c('Not included', "-", "-", 'Implementation error not included in the calculation or reference points'))
+```
+
+# Model Settings
+The settings of the simulations to calculate the reference points are the same used in the last benchmark of this stock (ICES, 2022) and are summarized in Table \@ref(tab:model-settings). The only difference is in the time period used for the calculation of stock-recruiment relationship which has been selected at the begining of this document based on the stability of the fits.
+
+
+```{r model-settings, tab.cap='Simulation model settings', tab.id='model-settings', label='model-settings'}
+scenario_table(model_settings, 
+               scenario_name = "Base Case", 
+               description = "The same settings used in the calculation of reference points in the last benchmark")
 ```
 
 # Stock-recruitment relationship
@@ -42,29 +107,103 @@ include_graphics("report/recruitment_fits.png")
 # Definition of $B_{lim}$
 
 ## SR Breakpoint
-In this section we analysed if the SR breakpoint is well estimated. First we conducted a bootstrap of the recruitment residuals an re-estimate the stock recruitment parameters. The distribution of the 'b' parameter, the breakpoint, has a wide distribution with most of the values between 49000 and 63000 tonnes (Figure \@ref(fig:breakpoint-boot)). The median of the distribution is equal to 57367 tonnes close to the deterministic value, 57908. The coefficient of variation of the distribution was equal to 20%.    
+```{r}
+corr_sr_pars <- round(sr.fits$segreg@vcov[1,2]/sqrt(sr.fits$segreg@vcov[1,1]*sr.fits$segreg@vcov[2,2]),2)
+```
+In this section we analysed if the SR breakpoint is well estimated. The parameters of the relationship were highly correlated `r corr_sr_pars`. This correlation made the fit sensitive to small variations in data. When one year is takend out of the fit (Figure \@ref(fig:breakpoint-1yrOut))  
+
+```{r breakpoint-1yrOut, fig.cap="Segmented regression stock recruitment fit parameters when one year is taken out of the fit. The year label indicates de year that has left out."}
+include_graphics("report/recruitment_segreg_1yrOut.png")
+q25_bp <- round(quantile(segreg_boot$b[drop=T], .25))
+q75_bp <- round(quantile(segreg_boot$b[drop=T], .75))
+q50_bp <- round(quantile(segreg_boot$b[drop=T], .50))
+cv_bp <- round(sd(segreg_boot$b[drop=T])/mean(segreg_boot$b[drop=T])*100)
+```
+
+First we conducted a bootstrap of the recruitment residuals an re-estimate the stock recruitment parameters. The distribution of the 'b' parameter, the breakpoint, has a wide distribution with most of the values around the median between `r q25_bp` and  and `r q75_bp` tonnes (Figure \@ref(fig:breakpoint-boot)). The median of the distribution is equal to `r q50_bp` tonnes close to the deterministic value, `r Blim_segreg` The coefficient of variation of the distribution was equal to `r cv_bp`. 
 
 ```{r breakpoint-boot, fig.cap="Density distributions of the segmented regression parameters fitted to bootstraped stock recruitment residuals."}
 include_graphics("report/recruitment_segreg_breakpoint.png")
 ```
 
 ## B0 
-A second bootstrap was conducted were the three stock recruitment relationships were fitted and in its iteration the best one was selected. The segmented regression model was selected in 77% of the cases, Beverton and Holt in the 22% and  Ricker in a 1%. $B_0$ and $B_{msy}$ and other biomass reference levels were calculated in each of the iterations and their distributions were analysed. (Figure \@ref(fig:biomass-refpts)). The MSY biomass reference point, $B_{msy}$, is around 27% of the $B_0$ level. $F_{max}$ is close to $F_{msy}$, influenced by the high weight of the segmented regression relationship. The $F_{0.1}$ fishing mortality leads to a biomass close to 50% of $B_{msy}$.
+A second bootstrap was conducted where the three stock recruitment relationships were fitted and in its iteration the best one was selected. The segmented regression model was selected in 77% of the cases, Beverton and Holt in the 22% and  Ricker in a 1%, despite Ricker being the best one in the deterministic fit. $B_0$ and $B_{msy}$ and other biomass reference levels were calculated in each of the iterations and their distributions were analysed. (Figure \@ref(fig:biomass-refpts)). The MSY biomass reference point, $B_{msy}$, is around 27% of the $B_0$ level. $F_{max}$ is close to $F_{msy}$, influenced by the high weight of the segmented regression relationship. The $F_{0.1}$ fishing mortality leads to a biomass close to 50% of $B_{msy}$.
 
 ```{r biomass-refpts, fig.cap="Density distributions of several Biomass reference points."}
 include_graphics("report/Biomas_ReferencePoints.png")
 
 ratB0 <- round(100*(median(B0)/max(ssb(hke.stk))-1))
+cv_B0 <- round(100*sd(B0)/mean(B0))
 ```
 
 
-The estimated B0 is `r ratB0` % higher than the maximum SSB in the historical time series (Figure \@ref(fig:hist-biomass-refpts)). 10% of $B0$ is just above the minimum levels observed in the late 90s just before the recovery plan was implemented. The segmented regression breakpoint is between the 10% and 15% of $B0$ which is somewhat above the minimum biomass levels.  $B_{smy}$
+The estimated B0 is `r ratB0` % higher than the maximum SSB in the historical time series (Figure \@ref(fig:hist-biomass-refpts)). 10% of $B0$ is just above the minimum levels observed in the late 90s just before the recovery plan was implemented. The segmented regression breakpoint is between the 10% and 15% of $B0$ which is somewhat above the minimum biomass levels. The coefficient of variation in $B_0$ is equal to `r cv_B0`. The distribution of $B_0$ is driven by the segmented regression relationship and is determined by the value of $R_0$ and the biological paremeters. The variation in $R_0$ is lower than in the breakpoint because of the correlation between the segmente regression model parameters. 
 
-The stock recruitment pairs seem to be informative about $R_0$ in this case, as the asymptote of the segmented regression and Beverton and Holt stock recruitment models are determined by various observations (\@ref(fig:srr-fit)). Furthermore, the stock-recruitment pairs that determine the asymptote have been observed in the recent past, which suggest that this recruitment level is compatible with current ecosystem status. Thus, assuming $R_0$ is well estimated, if biological parameters, such as weight, natural mortality and maturity at age were compatible with higher biomass levels, the estimated $B_0$ would make sense in this case.      
+The stock recruitment pairs seem to be informative about $R_0$, as the asymptote of the segmented regression and Beverton and Holt stock recruitment models are determined by various observations (\@ref(fig:srr-fit)). Furthermore, the stock-recruitment pairs that determine the asymptote have been observed in the recent past, which suggest that this recruitment level is compatible with current ecosystem status. Thus, assuming $R_0$ is well estimated, if biological parameters, such as weight, natural mortality and maturity at age were compatible with higher biomass levels, the estimated $B_0$ would make sense in this case.      
 
 ```{r hist-biomass-refpts, fig.cap="Historical time series of SSB. The horizontal lines correspond with different percentages of $B_0$, $B_{msy}$ and $B_{lim, segreg}$."}
 include_graphics("report/Historical_SSB_&_B0_Blim_Bmsy.png")
 ```
 
-## Summary
-In this case, both, the segmented regression break-point and $B_{0}$
+## Data Driven approaches
+
+## Proposal for $B_{lim}$
+In this case, both, the segmented regression break-point and $B_{0}$ are  well estimated, although the coefficient of variation is lower in $B_{0}$. 
+
+```{r}
+Blim <- as.character(round(Blim_segreg))
+```
+
+<p class="refpt">
+According to the proposed reference point framework, the segmented regression breakpoint is selected resulting in $B_{lim} =$   `r Blim`. 
+</p>
+
+
+
+# Simulation settings
+The calculation of fishing mortality reference points requires to carry out long term simulations where several assumptions need to be taken about future recruitment level, biological parameters and selection pattern. The table below summarizes the assumptions made and models used.
+
+
+
+
+# Fp.05
+Once $B_{lim}$ is defined the next step is to calculate $F_{p.05}$.  
+
+
+<p class="definition">
+$F_{p.05}$ is defined as the maximum fishing mortality that results in $p(SSB<B_{lim}) \leq 5\%$ in the steady-state when long term simulations are carried out with a constant fishing mortality without the ICES advice rule.
+</p>
+
+Long term simulations were run using fishing mortalities in the range $[0, 1]$ using steps of 0.01. Figure \@ref(fig:Fp05-calc) shows the probabilities of being below $B_{lim}$ for those fishing mortalities. 
+
+```{r Fp05-calc, fig.cap="Long term probability of being below $B_{lim}$ for fishing mortlaity values in the range of [0,2] range."}
+include_graphics("report/pssb_bxp.png")
+```
+
+<p class="refpt">
+Based on long term stochastic simulations $F_{p.05} = $ `r Fp.05`. 
+</p>
+
+# Selection of Fmsy
+
+The long term yields obtained for different values of fishing mortality using stochastic simulations are shown in Figure \@ref(fig:longtermyields). In curve of the median yield values around the maximum is very flat and a yield only 1% lower can be obtained in the whole range  [`r msy99[1]`,`r msy99[length(msy99)]`] (Figure \@ref(fig:)).
+
+```{r longtermyields, fig.cap="Long term yields obtained for different values of fishing mortality using stochastic simulations."}
+include_graphics("report/yield_equilibrium_bxp.png")
+```
+
+The theoretical $F_{msy}$ based on long term simulations is  $F_{msy} =$ `r Fmsy`. Far from the deterministic $F_{msy}$ values for each of the stock-recruitment relationships (\@ref(tab:fmsy-det)). The deterministic values in this case are much lower but are close to the lower bound of the fishing mortality range corresponding to yields no lower than $0.99\cdot MSY$.
+
+```{r, tab.cap='Deterministic $F_{msy}$ for each of Beberton and Holt, Ricker and Segmented regression models', tab.id='fmsy-det', label='fmsy-det'}
+fmsy_tab <- brps_det %>% filter(quant == 'harvest', refpt == 'msy') %>% group_by(model) %>% select(model, data)
+flextable(fmsy_tab)
+```
+
+
+<p class="refpt">
+The theoretical $F_{msy}$ based on long term simulations is  $F_{msy} =$ `r Fmsy`. 
+</p>
+
+
+
+

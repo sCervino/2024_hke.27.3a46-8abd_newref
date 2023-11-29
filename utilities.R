@@ -192,3 +192,34 @@ bootstrapSR_list <- function (x, iters = 100, method = c("best", "logLik", "rela
 #  params <- Reduce(combine, res)
   return(res)
 }
+
+
+# Function to create a table with the model settings.
+scenario_table <- function(settings, scenario_name, description){
+  nrow <- length(settings)
+  res <- data.frame(Component = rep(NA, nrow), Process = rep(NA, nrow),
+                    Model = rep(NA, nrow),
+                    `Years used` = rep(NA, nrow),
+                    `Source`= rep(NA, nrow),
+                    `Rationale` = rep(NA, nrow))
+  
+  res[,1] <- c("Initial population", "Initial population", "Recruitment", "Recruitment",        
+               "Recruitment", "Biological parameters", "Biological parameters", "Biological parameters",                 
+               "Fishery parameters", "Fishery parameters", "Short cut approach",  "Short cut approach", "Short cut approach", "Short cut approach", "Harvest_Control_Rules", "Implmentation error") 
+  res[,2] <- c("Model", "Uncertainty", "Functional form", "Parametric uncertainty",        
+               "Process error", "Natural mortality", "Maturity", "Weight at age",                 
+               "Selection pattern", "Discards", "Recruitment", "SSB_cv",  "F_cv", "Fphi", "Harvest control rules", "Implementation Error") 
+  for(r in 1:dim(res)[1]) res[r,-(1:2)] <- model_settings[[r]]
+  
+  
+  res <- cbind(Space = c(rep('Operating model', 10), rep('Management procedure', nrow-10)), res)
+  
+  res <- flextable(res) %>% merge_v(j = 1:2) %>%  
+    add_header_row(values = c("Description", description),  colwidths = c(1,dim(res)[2]-1)) %>% 
+    add_header_row(values = c("Scenario Name", scenario_name),  colwidths = c(1,dim(res)[2]-1)) %>% 
+    hline(c(2,5,8,10,11,14,15,16)) %>% 
+    width(c(2, 3, 4,6, 7), c(2,5,5,5,10), unit = 'cm')
+  
+  return(res)
+  
+}

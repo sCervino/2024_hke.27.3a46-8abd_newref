@@ -10,6 +10,7 @@
 library(tidyverse)
 library(icesTAF)
 library(mse)
+library(gridExtra)
 
 source("utilities.R")
 mkdir("output")
@@ -45,7 +46,7 @@ Blim <- Blim_segreg
 
 # p(ssb < 0.05) over time and F levels.
 pssb <- as_tibble(Reduce('rbind', lapply(1:201, function(i){
-                             res <- as_tibble(as.data.frame(ssb(plans[[i]]@om@stock))[,c(2,6:7)]) %>% 
+                             res <- as_tibble(as.data.frame(ssb(FcteSims[[i]]@om@stock))[,c(2,6:7)]) %>% 
                                       mutate(lowerBlim = (data < Blim)) %>% group_by(year) %>% 
                                       summarize_at('lowerBlim', sum) %>% mutate(lowerBlim = lowerBlim/it)
                              res <- cbind(F = seq(0,2, 0.01)[i], res)
@@ -64,10 +65,10 @@ dev.off()
 #### Fmsy ----
 # yield over time, iterations and F levels.
 yields <- as_tibble(Reduce('rbind', 
-                           lapply(1:201, function(i) cbind(F = seq(0,2, 0.01)[i],as.data.frame(plans[[i]]@om@stock@catch)[,c(2,6:7)])))) %>% 
+                           lapply(1:101, function(i) cbind(F = seq(0,2, 0.01)[i],as.data.frame(FcteSims[[i]]@om@stock@catch)[,c(2,6:7)])))) %>% 
   mutate(F = as.factor(F))
 
-# COMPUTE yearly performance statistics, ADD F0 as reference
+# COMPUTE yearly performance statistics
 yields.max <- yields %>% filter(year %in% ac(2040:2050)) %>% group_by(F, iter) %>% summarize_at('data', mean) %>% 
                   group_by(F) %>% summarize_at('data', median)
 Fmsy_df <- yields.max[which.max(yields.max$data),]
@@ -75,59 +76,52 @@ Fmsy <- as.numeric(as.character(Fmsy_df$F))
  msy <- as.numeric(as.character(Fmsy_df$data))
 
  taf.png(file="report/yield_equilibrium_bxp.png")
- ggplot(yields %>% filter(year %in% ac(2045), F %in% as.character(seq(0,0.8, 0.01))), aes(F, data)) + 
+ p1 <- ggplot(yields %>% filter(year %in% ac(2045), F %in% as.character(seq(0,0.8, 0.01))), aes(F, data)) + 
    geom_boxplot() + ggtitle("Yield in equilibrium") + ylab('tonnes') + 
    geom_point(data = Fmsy_df, aes(F, data), size = 3, col = 'blue', pch = 18) +
    geom_text(data = Fmsy_df, aes(as.character(F), data*0.9, label= Fmsy)) 
+ p1
  dev.off()
  
+ # auxiliar plot to look at stability of the output
+aux <- yields %>% filter(year %in% ac(2040:2050)) %>% group_by(F, year) %>% summarize_at('data', median) 
+ ggplot(aux %>% filter(F %in% seq(0.2,0.5, 0.01)), aes(year, data, group = F, colour = F)) + geom_line()
  
  
+# How flat is the curve?
+msy99 <- as.numeric(as.character(yields.max[which(yields.max$data > max(yields.max$data)*0.99), ]$F))
 
-perf_year <- performance(c(plans, F0=runf0), statistics=annualstats,
-  years=2023:2041)
+taf.png(file="report/yield_equilibrium_line.png")
+p2 <- ggplot(yields.max, aes(as.numeric(as.character(F)), data)) + geom_line(linewidth = 1) + xlab('F') + ylab('t') + 
+  ggtitle('Long term median yield') + geom_vline(xintercept = msy99[c(1, length(msy99))], col = 2) +
+  geom_vline(xintercept = Fmsy, col = 3, linewidth = 2)
+p2
+dev.off()
 
-# COMPUTE performance statistics by periods
+# Biomass 
+ssbs <- as_tibble(Reduce('rbind', 
+                           lapply(1:101, function(i) cbind(F = seq(0,1, 0.01)[i],as.data.frame(ssb(FcteSims[[i]]@om@stock))[,c(2,6:7)])))) %>% 
+  mutate(F = as.factor(F)) %>% group_by(F, year) %>%  summarize_at('data', median)
+ssb99msy <- ssbs[as.numeric(as.character(ssbs$F)) %in% msy99,]
 
-perf <- performance(c(plans, F0=runf0), statistics=fullstats,
-  years=list(short=2024:2028, medium=2028:2034, long=2034:2041, all=2024:2041))
+taf.png(file="report/ssb_equilibrium_bxp.png")
+p1 <- ggplot(ssbs %>% filter(year %in% ac(2045), F %in% as.character(seq(0,0.8, 0.01))), aes(F, data)) + 
+  geom_boxplot() + ggtitle("SSB in equilibrium") + ylab('tonnes') + 
+  geom_point(data = Fmsy_df, aes(F, data), size = 3, col = 'blue', pch = 18) +
+  geom_text(data = Fmsy_df, aes(as.character(F), data*0.9, label= Fmsy)) 
+p1
+dev.off()
 
+ssb99 <- ssbs[as.numeric(as.character(ssbs$F)) %in% msy99,]
 
-# --- TABLES
-
-tables <- list()
-
-# WHEN does stock recover (P(SB>Blim) >= 95%) by mp?
-
-tables$recovery <- perf_year[statistic == "PBlim" & data > 0.95, .SD[1], 
-  by=mp][order(year),]
-
-perf[statistic=='firstyear' & year == 'all', data, by=.(mp)][order(data),]
-
-# WHEN is P(B>Btrigger) > 50% by mp?
-
-tables$status <- perf_year[statistic == "PBtrigger" & data > 0.50, .SD[1],
-  by=mp]
-
-# CREATE table of catch by mp and year (mp ~ year | C)
-
-tables$catch_mp <- dcast(perf_year[statistic == 'C', .(data=mean(data)),
-  by=.(year, mp, name, desc)], mp ~ year, value.var='data')
-
-# CREATE table of all statistics by mp and year (statistic + mp ~ year)
-
-tables$stats_mp <- dcast(perf_year[, .(data=mean(data)),
-  by=.(year, mp, name, desc)], name + mp ~ year, value.var='data')
+taf.png(file="report/ssb_equilibrium_line.png")
+p2 <- ggplot(yields.max, aes(as.numeric(as.character(F)), data)) + geom_line(linewidth = 1) + xlab('F') + ylab('t') + 
+  ggtitle('Long term median yield') + geom_vline(xintercept = msy99[c(1, length(msy99))], col = 2) +
+  geom_vline(xintercept = Fmsy, col = 3, linewidth = 2)
+p2
+dev.off()
 
 
-# --- TRACK decisions (EXAMPLES)
-
-# TRACK decision for a single iter and year
-decisions(advice, year=2024, iter=1)
-
-# TRACk decisions for multiple years and all iters
-decisions(advice, year=2024:2025)
-
-# SAVE
-
-save(perf_year, perf, tables, file="output/output.rda", compress="xz")
+# [Bmsy, Fmsy] area
+ 
+save(yields, Fmsy, pssb, Fp.05, msy99, file="output/output.rda", compress="xz")

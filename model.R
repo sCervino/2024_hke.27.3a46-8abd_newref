@@ -16,29 +16,30 @@ library(mse)
 #### Arguments and options ----
 
 # CHOOSE number of cores for doFuture
-cores <- 3
+cores <- 1
+
+setwd('C:/use/OneDrive - AZTI/ICES WK/WKNEWREF/2024_hke.27.3a46-8abd_newref')
 
 # LOAD oem and oem
 load('data/data.rda')
 load("data/Biomass_refpts.rda")
 
 
-it <- 500
+it <- 1000
 
 # important years
 iy <- 2023
-fy <- 2050
+fy <- 2100
 
 
 Blim     <- Blim_segreg
-Btrigger <- 
   
   
 #### Short cut approach: F and SSB deviances ----
 sdevs <- shortcut_devs(om, Fcv = 0.212, Fphi= 0.423, SSBcv = 0)
 
 # Grid of F-s to use in the forward projection to fing Fmsy
-opts <- list(lim=rep(0,201), target=seq(0,2, 0.01), min=seq(0,2, 0.01))
+opts <- list(lim=rep(0,101), target=seq(0,1, 0.01), min=seq(0,1, 0.01))
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -73,7 +74,7 @@ AR <- mpCtrl(list(
   # hcr: hockeystick (fbar ~ ssb | lim, trigger, target, min)
   hcr = mseCtrl(method=hockeystick.hcr,
     args=list(lim=0, trigger=refpts(om)$Btrigger, target=refpts(om)$Fmsy,
-    min=0, metric="ssb", output="fbar")),
+    min=0, drop=0, metric="ssb", output="fbar")),
 
   # (i)mplementation (sys)tem: tac.is (C ~ F) + F deviances
   isys = mseCtrl(method=tac.is,
@@ -91,7 +92,7 @@ FcteR <- mpCtrl(list(
   # hcr: hockeystick (fbar ~ ssb | lim, trigger, target, min)
   hcr = mseCtrl(method=hockeystick.hcr,
                 args=list(lim=0, trigger=refpts(om)$Btrigger, target=refpts(om)$Fmsy,
-                          min= refpts(om)$Fmsy, metric="ssb", output="fbar")),
+                          min= refpts(om)$Fmsy, drop = 0, metric="ssb", output="fbar")),
   
   # (i)mplementation (sys)tem: tac.is (C ~ F) + F deviances
   isys = mseCtrl(method=tac.is,
@@ -117,24 +118,40 @@ plot_hockeystick.hcr(FcteR$hcr, labels=c(lim="Blim", trigger="MSYBtrigger",
 
 # PLOT
 # plot(runf0, advice, window=FALSE)
-
+ 
 
 
 #### Simulations with constant F in the range [0,2] ---- 
+# system.time(
+#   FcteSims <- lapply(1:10, function(j){
+#           aux <- mps(window(om, start=2020), ctrl=FcteR, args=mseargs, hcr=lapply(opts, function(x) x[j]))
+#           res <- metrics(aux)
+#           return(res)}
+#           ))
+
 system.time(
-  FcteSims <- mps(window(om, start=2020), ctrl=FcteR, args=mseargs, hcr=opts)
-)
+  FcteSims <- lapply(31:31, function(j){
+    cat('.................  ', j, ' ................../n')
+    FcteRtemp <- FcteR
+    FcteRtemp$hcr@args$target[] <- opts$target[j]
+    FcteRtemp$hcr@args$min[] <- opts$target[j]
+  system.time(aux <- mp(om, iem=iem, ctrl=FcteRtemp, args=mseargs, verbose = TRUE, parallel = F))
+    res <- metrics(aux)
+    return(res)}
+  ))
+
 
 
 # --- SAVE
 
-save(FcteSims, file="model/FcteSims.rda", compress="xz")
-
-#### Simulations with constant F in the range [0,2] ---- 
-system.time(
-      ARSims <- mps(window(om, start=2020), ctrl=AR, args=mseargs, hcr=opts)
-)
-
+# save(FcteSims, file="model/FcteSims.rda", compress="xz")
+# 
+# #### Simulations with constant F in the range [0,2] ---- 
+# system.time(
+#       ARSims <- mps(window(om, start=2020), ctrl=AR, args=mseargs, hcr=opts)
+# )
+# 
+# save(FcteSims, file="model/ARSims.rda", compress="xz")
 
 # CLOSE cluster
 plan(sequential)

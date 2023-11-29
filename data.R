@@ -19,7 +19,9 @@ library(Rfast)
 library(tidyverse)
 library(grid)
 library(gridExtra)
-
+library(patchwork)
+library(ggpubr)
+library(ggExtra)
 
 # CHOOSE number of cores for doFuture / doParallel
 cores <- 3
@@ -35,13 +37,13 @@ refpts <- FLPar(Btrigger = 78405, Fmsy = 0.24, Blim = 61563, Bpa = 78405,
 # INTERMEDIATE year
 iy <- 2023
 # FINAL year
-fy <- 2050
+fy <- 2100
 # Years to fit Stock-Recruitment relationship.
 # Selected after the first analysis: segreg_finalYr
 recy <- 1978:2020
 
 # NUMBER of iterations
-it <- 500
+it <- 1000
 
 set.seed(527)
 
@@ -139,14 +141,27 @@ stats_brkpt[2,] <- c(mean(segreg_1yrOut[2,]), median(c(segreg_1yrOut[2,])),
 
 
 # Plot the bootstrap breakpoint
+# taf.png("report/recruitment_segreg_breakpoint.png")
+# par(mfrow = c(1,2))
+# boxplot(c(segreg_boot[2,]), main = "Boostrap Segmented regression  breakpoint")
+# mtext(paste('mean = ', round(stats_brkpt[1,1]), ', median = ', round(stats_brkpt[1,2]), 
+#             'cv = ', round(stats_brkpt[1,3],2), ', sd = ', round(stats_brkpt[1,4])), 1, line = 2)
+# plot(density(c(segreg_boot[2,])), main = "", xlab = "")
+# abline(v = round(stats_brkpt[1,2]), col = 2)
+# dev.off()
 taf.png("report/recruitment_segreg_breakpoint.png")
-par(mfrow = c(1,2))
-boxplot(c(segreg_boot[2,]), main = "Boostrap Segmented regression  breakpoint")
-mtext(paste('mean = ', round(stats_brkpt[1,1]), ', median = ', round(stats_brkpt[1,2]), 
-            'cv = ', round(stats_brkpt[1,3],2), ', sd = ', round(stats_brkpt[1,4])), 1, line = 2)
-plot(density(c(segreg_boot[2,])), main = "", xlab = "")
-abline(v = round(stats_brkpt[1,2]), col = 2)
+segreg_boot_df <- as.data.frame(t(segreg_boot[drop=T]))
+plot1 <- ggplot(segreg_boot_df, aes(x = a, y = b)) + 
+  geom_point(color = "#619CFF") + 
+  stat_smooth(method = "lm", fullrange = TRUE) +
+  geom_rug() + 
+  scale_y_continuous(name = "b (the breakpoint)",  limits = range(segreg_boot_df$b) ) + 
+  scale_x_continuous(name = "a (the slope)",  limits = c(10, 40), expand = c(0, 0)) + 
+  theme_pubr()  + ggtitle("Boostraped Segmented regression parameters")
+
+ggMarginal(plot1, fill = "#619CFF") 
 dev.off()
+
 
 #### BOOTSTRAP and SELECT the SR model by largest logLik ----
 mixedSR_boot <- bootstrapSR_list(stk, iters=it, models=c("ricker", "bevholt", 'segreg'), method="best")
@@ -156,6 +171,15 @@ save(sr.fits, segreg_boot, mixedSR_boot, stats_brkpt, file="data/SR_analysis.rda
 
 
 #### Calculate reference points using FLRef library ----
+
+brps_det <- lapply(sr.fits, 
+                    function(x) computeFbrps(stock = stk, sr = x, proxy = 'sprx', f0.1 = TRUE, verbose = FALSE))
+
+brps_det <- as_tibble(Reduce(rbind, lapply(1:3, function(i) cbind(as.data.frame(brps_det[[i]]@refpts[-c(1, 3,7, 12)][,1:5])[,-3], 
+                                                        
+                                                               model = names(sr.fits)[i]))))
+
+
 brps_objs <- lapply(mixedSR_boot, 
                function(x) computeFbrps(stock = stk, sr = x, proxy = 'sprx', f0.1 = TRUE, verbose = FALSE))
 
@@ -163,7 +187,7 @@ brps <- as_tibble(Reduce(rbind, lapply(1:it, function(i) cbind(as.data.frame(brp
                                               iter = i,
                                               model = mixedSR_boot[[i]]@desc))))
 #### SAVE BRPs ----
-save(brps, file="data/brps.rda", compress="xz")
+save(brps, brps_det, file="data/brps.rda", compress="xz")
 
 #### Analyse B0 and potential Blims ---- 
 
@@ -183,11 +207,10 @@ ggplot(brps %>% filter(quant == 'ssb'), aes(data, fill = refpt)) + geom_density(
 
 p1 <- ggplot(brps %>% filter(quant == 'ssb'), aes(data,fill = refpt, alpha = 0.3)) + 
   geom_density( colour = 'white') +
-  scale_fill_manual(values = c(brewer.pal(8,'Dark2'), 'black')) +
-  annotation_custom(grob) + 
-  theme(plot.margin=unit(c(1,1,0,1), "cm")) + xlab(NULL)
+  scale_fill_manual(values = c(brewer.pal(8,'Dark2'), 'black')) + xlab(NULL)+ 
+  theme(plot.margin=unit(c(1,1,0,1), "cm")) 
 
-p1 <- ggplotGrob(p1)
+p1 <- ggplotGrob(p1) 
 p2<-tableGrob(SSBrpRel2B0) 
 
 taf.png("report/Biomas_ReferencePoints.png")
