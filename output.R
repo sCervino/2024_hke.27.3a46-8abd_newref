@@ -123,5 +123,138 @@ dev.off()
 
 
 # [Bmsy, Fmsy] area
- 
+
+#### AR[OPRs] Robust to minimum assessment uncertainty?  ----
+# Here we use a short-cut MSE with the same implementation error as in
+# eqSim by including the 1 year time lag.
+
+
+#### AR[OPRs] Robust to observed low productivity in the historical period?  ----
+
+
+#### AR[OPRs] Btrigger well defined to avoid Blim ----
+# Applying a constant high F reduce the SSB to a point in (Bpa, MSYBtrigger)
+# and analyse the capacity of the AR[OPRs] to rebuild the stock above Bpa.
+
+
+### AR[OPRs] Btrigger, Blim well defined to recover the stock ----
+
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+#### Implementation error ----
+# No implementation error in the calculation of the reference points
+mean.iem <- 0
+sd.iem   <- 0
+iem <- FLiem(method=noise.iem,
+             args=list(noise=rlnorm(it, rec(om) %=% mean.iem, sd.iem)))
+
+
+#### SET UP MP runs ----
+
+# SET intermediate year + start of runs, lags and frequency
+# iy in the mseargs = iy-1 because we need advice in 2023
+mseargs <- list(iy=iy-1, fy=fy, data_lag=1, management_lag=1, frq=1)
+
+# SETUP standard ICES advice rule
+AR <- mpCtrl(list(
+  
+  # (est)imation method: shortcut.sa + SSB deviances
+  est = mseCtrl(method=shortcut.sa,
+                args=list(SSBdevs=sdevs$SSB)),
+  
+  # hcr: hockeystick (fbar ~ ssb | lim, trigger, target, min)
+  hcr = mseCtrl(method=hockeystick.hcr,
+                args=list(lim=0, trigger=refpts(om)$Btrigger, target=refpts(om)$Fmsy,
+                          min=0, drop=0, metric="ssb", output="fbar")),
+  
+  # (i)mplementation (sys)tem: tac.is (C ~ F) + F deviances
+  isys = mseCtrl(method=tac.is,
+                 args=list(recyrs=-2, fmin=0, Fdevs=sdevs$F))
+))
+
+
+# SETUP a constant F advice rule tunning the ICES AR.
+FcteR <- mpCtrl(list(
+  
+  # (est)imation method: shortcut.sa + SSB deviances
+  est = mseCtrl(method=shortcut.sa,
+                args=list(SSBdevs=sdevs$SSB)),
+  
+  # hcr: hockeystick (fbar ~ ssb | lim, trigger, target, min)
+  hcr = mseCtrl(method=hockeystick.hcr,
+                args=list(lim=0, trigger=refpts(om)$Btrigger, target=refpts(om)$Fmsy,
+                          min= refpts(om)$Fmsy, drop = 0, metric="ssb", output="fbar")),
+  
+  # (i)mplementation (sys)tem: tac.is (C ~ F) + F deviances
+  isys = mseCtrl(method=tac.is,
+                 args=list(recyrs=-2, fmin=0, Fdevs=sdevs$F))
+))
+
+
+
+# plot HCRs
+plot_hockeystick.hcr(AR$hcr, labels=c(lim="Blim", trigger="MSYBtrigger",
+                                      min="", target="Ftarget")) +
+  xlab(expression(hat(SSB))) + ylab(expression(bar(F)))
+
+plot_hockeystick.hcr(FcteR$hcr, labels=c(lim="Blim", trigger="MSYBtrigger",
+                                         min="", target="Ftarget")) +
+  xlab(expression(hat(SSB))) + ylab(expression(bar(F)))
+
+
+# - RUN applying ICES advice rule
+# system.time(
+#   advice <- mp(om, iem=iem, ctrl= AR, args=mseargs)
+# )
+
+# PLOT
+# plot(runf0, advice, window=FALSE)
+
+
+
+#### Simulations with constant F in the range [0,2] ---- 
+# system.time(
+#   FcteSims <- lapply(1:10, function(j){
+#           aux <- mps(window(om, start=2020), ctrl=FcteR, args=mseargs, hcr=lapply(opts, function(x) x[j]))
+#           res <- metrics(aux)
+#           return(res)}
+#           ))
+
+system.time(
+  FcteSims <- lapply(31:31, function(j){
+    cat('.................  ', j, ' ................../n')
+    FcteRtemp <- FcteR
+    FcteRtemp$hcr@args$target[] <- opts$target[j]
+    FcteRtemp$hcr@args$min[] <- opts$target[j]
+    system.time(aux <- mp(om, iem=iem, ctrl=FcteRtemp, args=mseargs, verbose = TRUE, parallel = F))
+    res <- metrics(aux)
+    return(res)}
+  ))
+
+
+
+# --- SAVE
+
+# save(FcteSims, file="model/FcteSims.rda", compress="xz")
+# 
+# #### Simulations with constant F in the range [0,2] ---- 
+# system.time(
+#       ARSims <- mps(window(om, start=2020), ctrl=AR, args=mseargs, hcr=opts)
+# )
+# 
+# save(FcteSims, file="model/ARSims.rda", compress="xz")
+
+# CLOSE cluster
+plan(sequential)
+
+
+
+
+
+
 save(yields, Fmsy, pssb, Fp.05, msy99, file="output/output.rda", compress="xz")

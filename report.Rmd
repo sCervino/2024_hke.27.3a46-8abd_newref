@@ -2,9 +2,13 @@
 title: "Calculation of reference points for Northern stock of Hake (hke.27.3a46-8abd)"
 author: Dorleta Garcia 
 date: "`r format(Sys.time(), '%d %B, %Y')`"
-output: 
-    bookdown::html_document2:
-      base_format: tint::tintHtml
+output:bookdown::html_document2:
+          base_format: tint::tintHtml
+
+# output:
+#   bookdown::pdf_book:
+#     base_format: tint::tintPdf
+    
 license: Creative Commons Attribution-ShareAlike 4.0 International Public License
 ---
 
@@ -45,6 +49,7 @@ library(tidyverse)
 
 opts_chunk$set(
   collapse = TRUE,
+  warning = FALSE,
   comment = "#>",
   out.width="92%",
   echo = FALSE
@@ -86,10 +91,12 @@ The settings of the simulations to calculate the reference points are the same u
 
 
 ```{r model-settings, tab.cap='Simulation model settings', tab.id='model-settings', label='model-settings'}
-scenario_table(model_settings, 
+scetab <- scenario_table(model_settings, 
                scenario_name = "Base Case", 
                description = "The same settings used in the calculation of reference points in the last benchmark")
+scetab
 ```
+
 
 # Stock-recruitment relationship
 First the years for the calculation of reference points were selected. For northern hake normally the last two years are removed from the calculation. In Figure we analysed the robustness of segmented regression SR to the length of the time series. We use segmented regression because when the breakpoint is well estimated it is the default for the estimation of $B_{lim}$. In this case only the inclusion of last year data, 2022, led to a difference in the estimation of most of the 'a' parameter and the inclusion of 2020 and 2021 data years led to a significant decrease in the 'b' parameter estimate, the break point (see Figure \@ref(fig:srr-ts)). For the rest of the time series the variability in the 'b' parameter estimate was lower. Thus, it was decided to consider data only up to 2019 to calculate the SR models.
@@ -181,7 +188,7 @@ include_graphics("report/pssb_bxp.png")
 ```
 
 <p class="refpt">
-Based on long term stochastic simulations $F_{p.05} = $ `r Fp.05`. 
+Based on long term stochastic simulations $F_{p.05} =$ `r Fp.05`. 
 </p>
 
 # Selection of Fmsy
