@@ -56,12 +56,11 @@ opts_chunk$set(
 )
 
 # Load data
-load('data/data.rda')
 load("data/SR_analysis.rda")
 load('bootstrap/data/wgbie2023_nhke_FLStock_csim.RData')
 load('data/Biomass_refpts.rda')
-load('output/output.rda')
 load('data/brps.rda')
+load('model/refpts.RData')
 # source
 source('utilities.R')
 ```
@@ -73,10 +72,10 @@ model_settings <- list(
          recruitment_functional_form     = c('Mixed - BH, Rick, SegReg', "1978-2019", "This document", "Guidelines and year range that provides stable results"),
                parametric_uncertainty    = c('Boostrap', "1978-2019", "This document", "The aim of the mixed recruitment model is to add both structural and parametric uncertainty"),
                         process_error    = c('lognormal', "1978-2019", "This document", "Residuals structure"),
-                      Natural_mortality  = c('historical mean', "2022", "ICES (2022)", "Low inter-annual variability"), 
-                                Maturity = c('historical mean', "2021-2022", "ICES (2023)", "Low inter-annual variability"),
-                          Weight_at_age  = c('historical mean', "2021-2022", "ICES (2023)", "Low inter-annual variability"),
-                      Selection_pattern  = c('Boostrap of last 10 years F-at-age', "2013-2022", "ICES (2023)", "High interannual variability"),
+                      Natural_mortality  = c('Bootstrap', "2017-2021", "ICES (2021)", "Same basis as benchmark"), 
+                                Maturity = c('Bootstrap', "2017-2021", "ICES (2021)", "Same basis as benchmark"),
+                          Weight_at_age  = c('Bootstrap', "2017-2021", "ICES (2021)", "Same basis as benchmark"),
+                      Selection_pattern  = c('Bootstrap', "2017-2021", "ICES (2021)", "Same basis as benchmark"),
                                Discards  = c('Boostrap of last 10 years F-at-age', "2013-2022", "ICES (2023)", "High interannual variability"),
                          Recruitment_mp  = c('geometric mean', "1978-(last data year-2)", "ICES (2022)", "Retrospective pattern in the last two estimates"),
                                   SSB_cv = c('0', "-", "-", 'Default value in ICES'),
@@ -87,7 +86,7 @@ model_settings <- list(
 ```
 
 # Model Settings
-The settings of the simulations to calculate the reference points are the same used in the last benchmark of this stock (ICES, 2022) and are summarized in Table \@ref(tab:model-settings). The only difference is in the time period used for the calculation of stock-recruiment relationship which has been selected at the begining of this document based on the stability of the fits.
+The settings of the simulations to calculate the reference points are the same used in the last benchmark of this stock (ICES, 2021) and are summarized in Table \@ref(tab:model-settings). The only difference is in the time period used for the calculation of stock-recruiment relationship which has been selected at the beginning of this document based on the stability of the fits.
 
 
 ```{r model-settings, tab.cap='Simulation model settings', tab.id='model-settings', label='model-settings'}
@@ -117,7 +116,7 @@ include_graphics("report/recruitment_fits.png")
 ```{r}
 corr_sr_pars <- round(sr.fits$segreg@vcov[1,2]/sqrt(sr.fits$segreg@vcov[1,1]*sr.fits$segreg@vcov[2,2]),2)
 ```
-In this section we analysed if the SR breakpoint is well estimated. The parameters of the relationship were highly correlated `r corr_sr_pars`. This correlation made the fit sensitive to small variations in data. When one year is takend out of the fit (Figure \@ref(fig:breakpoint-1yrOut))  
+In this section we analysed if the SR breakpoint is well estimated. The parameters of the relationship were highly correlated `r corr_sr_pars`. This correlation made the fit sensitive to small variations in data. When one year is taken out of the fit (Figure \@ref(fig:breakpoint-1yrOut))  
 
 ```{r breakpoint-1yrOut, fig.cap="Segmented regression stock recruitment fit parameters when one year is taken out of the fit. The year label indicates de year that has left out."}
 include_graphics("report/recruitment_segreg_1yrOut.png")
@@ -186,20 +185,20 @@ Long term simulations were run using fishing mortalities in the range $[0, 1]$ u
 ```{r Fp05-calc, fig.cap="Long term probability of being below $B_{lim}$ for fishing mortlaity values in the range of [0,2] range."}
 include_graphics("report/pssb_bxp.png")
 ```
-
 <p class="refpt">
-Based on long term stochastic simulations $F_{p.05} =$ `r Fp.05`. 
+Based on long term stochastic simulations  $F_{p.05} =$ `r round(Fp05_AR,2)`.
 </p>
+
 
 # Selection of Fmsy
 
-The long term yields obtained for different values of fishing mortality using stochastic simulations are shown in Figure \@ref(fig:longtermyields). In curve of the median yield values around the maximum is very flat and a yield only 1% lower can be obtained in the whole range  [`r msy99[1]`,`r msy99[length(msy99)]`] (Figure \@ref(fig:)).
+The long term yields obtained for different values of fishing mortality using eqSim are shown in Figure \@ref(fig:longtermyields). 
 
 ```{r longtermyields, fig.cap="Long term yields obtained for different values of fishing mortality using stochastic simulations."}
-include_graphics("report/yield_equilibrium_bxp.png")
+include_graphics("report/eqsim_Fmsy.png")
 ```
 
-The theoretical $F_{msy}$ based on long term simulations is  $F_{msy} =$ `r Fmsy`. Far from the deterministic $F_{msy}$ values for each of the stock-recruitment relationships (\@ref(tab:fmsy-det)). The deterministic values in this case are much lower but are close to the lower bound of the fishing mortality range corresponding to yields no lower than $0.99\cdot MSY$.
+The theoretical $F_{msy}$ based on long term eqSim simulations is  $F_{msy} =$ `r Fmsy`. The deterministic $F_{msy}$ values for each of the stock-recruitment relationships is shown in Table (\@ref(tab:fmsy-det)). The eqSim value is within the range of the  deterministic values.
 
 ```{r, tab.cap='Deterministic $F_{msy}$ for each of Beberton and Holt, Ricker and Segmented regression models', tab.id='fmsy-det', label='fmsy-det'}
 fmsy_tab <- brps_det %>% filter(quant == 'harvest', refpt == 'msy') %>% group_by(model) %>% select(model, data)

@@ -47,9 +47,9 @@ load("data/Biomass_refpts.rda")
 it <- 1000
 
 #### Load the FLStock object ---- 
-load('bootstrap/data/stk_MEG.RData')
+load('bootstrap/data/wgbie2023_nhke_FLStock_csim.RData')
 # Shorten the FLStock object based on previous analysis.
-stk <- window(data, dimnames(data)[[2]][1], 2021)
+stk <- window(hke.stk, dimnames(hke.stk)[[2]][1], 2021)
 
 # First year in the projection
 iy <- 2022
@@ -201,7 +201,7 @@ i <- which(Fs<Flim)
 b.lm <- loess(ssb.05[i] ~ Fs[i])
 lines(Fs[i],c(predict(b.lm)),type='l')
 
-MSYBtrigger_theo <- round(predict(b.lm,Fmsy_tmp))
+MSYBtrigger_temp <- round(predict(b.lm,Fmsy_tmp))
 abline(h=MSYBtrigger_theo, col = 2, lwd = 2)
 text(0.1,MSYBtrigger_theo*1.15, expression(MSYB[trigger]) )
 
@@ -213,6 +213,7 @@ sd <- 0.147
 SSB_p05 <- exp(qnorm(0.05, log(ssb(stk)[, '2019']), 0.147))
 
 
+MSYBtrigger <- max(Bpa, MSYBtrigger_temp)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #### 5.   Fp.05 = Fpa ----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -229,7 +230,7 @@ eqPop_Fp05_AR <- eqsim_run(sr_fit,
                            bio.years = bio.years,
                            sel.years = sel.years,
                            Fcv=cvF, Fphi=phiF, SSBcv=cvSSB,
-                           Btrigger = 0, Blim=Blim,Bpa=Bpa,
+                           Btrigger = MSYBtrigger, Blim=Blim,Bpa=Bpa,
                            rhologRec = rho_ar1,
                            Nrun=200, Fscan = seq(0,1,0.05),verbose=F)
 
@@ -280,8 +281,12 @@ Bmsy0.5 <- Bmsy*0.5
 
 ratio_MSYBtrigger_Bmsy <- MSYBtrigger_theo/Bmsy
 
+taf.png("report/potential_MSYBtrigger.png")
 barplot(c(Bpa = Bpa, q0.05_Bmsy = MSYBtrigger_theo,  q0.05_SSB2019 = SSB_p05, 
           `0.80*Bmsy` =  Bmsy0.8, `0.50*Bmsy` = Bmsy0.5), main = 'Potential MSY Btrigger values',
         ylab = 'tonnes')
+dev.off()
 
 
+save(B0, Blim, Blim_segreg, Blim_segreg_boot, Bmsy, Bmsy0.5, Bmsy0.8, Bpa, Flim , Fmsy, Fp05_AR, Fp05_NAR, 
+     MSYBtrigger, file = 'model/refpts.RData')
