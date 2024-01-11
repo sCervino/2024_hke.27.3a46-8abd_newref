@@ -14,7 +14,8 @@
 
 #### Install FLR packages from r-universe ----
 # The rest of the packages are available in CRAN
-# install.packages(c("FLCore",  "mse", "FLSRTMB", "FLRef"), repos = c('https://flr.r-universe.dev', 'https://cloud.r-project.org'))
+ install.packages(c("FLCore",  "FLBRP", "Flasher", "mse", "FLSRTMB", "FLRef"),
+                  repos = c('https://flr.r-universe.dev'))
 
 #### Load libraries ----
 # FLR related packages
@@ -59,12 +60,10 @@ refpts <- FLPar(Btrigger = 78405,
 iy <- stk@range['maxyear'] + 1
 # FIRST assessment year
 y0 <- stk@range['minyear'] 
-# FINAL year
-fy <- 2100
 
 # Years to fit Stock-Recruitment relationship.
 # NEED TO BE UPDATED: Selected after the first analysis!!!
-recy <- 1978:2020
+recy <- 1978:2019
 
 # DATA year
 dy <- stk@range['maxyear']
@@ -137,7 +136,9 @@ dev.off()
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #### Deterministic fit ----
-sr.fits     <- srrTMB(as.FLSRs(window(stk, recy[1], recy[length(recy)]), models=c("segreg", "ricker", "bevholt")), spr0=mean(spr0y(stk)))
+sr.fits     <- srrTMB(as.FLSRs(window(stk, recy[1], recy[length(recy)]), 
+                               models=c("segreg", "ricker", "bevholt")), spr0=mean(spr0y(stk)))
+
 Blim_segreg <- sr.fits$segreg@params$b[drop=T]
 
 # PLOT
