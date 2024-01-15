@@ -14,8 +14,8 @@
 
 #### Install FLR packages from r-universe ----
 # The rest of the packages are available in CRAN
- install.packages(c("FLCore",  "FLBRP", "Flasher", "mse", "FLSRTMB", "FLRef"),
-                  repos = c('https://flr.r-universe.dev'))
+ # install.packages(c("FLCore",  "FLBRP", "Flasher", "mse", "FLSRTMB", "FLRef"),
+ #                  repos = c('https://flr.r-universe.dev'))
 
 #### Load libraries ----
 # FLR related packages

@@ -13,7 +13,6 @@
 #      - 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
 #### Load libraries ----
 # FLR related packages
 library(FLRef)
@@ -33,6 +32,8 @@ library(ggExtra)   # Marginal histograms
 library(ggthemes)  # Themes for ggplot
 
 
+library(devtools)
+install_github("ices-tools-prod/msy")
 
 # library(Rfast)
 
@@ -44,7 +45,7 @@ library(ggthemes)  # Themes for ggplot
 #load('data/data.rda')
 load("data/Biomass_refpts.rda")
 
-it <- 1000
+it <- 100
 
 #### Load the FLStock object ---- 
 load('bootstrap/data/wgbie2023_nhke_FLStock_csim.RData')
@@ -85,12 +86,12 @@ source("utilities.R")
 #    Fit the three SRR to each of the iterations
 #    Select the model that best fits to the data based on the AIC.
 sr_fit <- eqsr_fit(stk,
-                nsamp = 1000,
+                nsamp = it,
                 models = c("Ricker", "Segreg", "Bevholt"))
 
 # Conduct a bootstrap with 1000 iterations fitting only the Segmented regression model
 sr_segreg <- eqsr_fit(stk,
-                   nsamp = 1000,
+                   nsamp = it,
                    models =  "Segreg")
 
 # deterministic fit to calculate the AR1 parameter
@@ -202,8 +203,8 @@ b.lm <- loess(ssb.05[i] ~ Fs[i])
 lines(Fs[i],c(predict(b.lm)),type='l')
 
 MSYBtrigger_temp <- round(predict(b.lm,Fmsy_tmp))
-abline(h=MSYBtrigger_theo, col = 2, lwd = 2)
-text(0.1,MSYBtrigger_theo*1.15, expression(MSYB[trigger]) )
+abline(h=MSYBtrigger_temp, col = 2, lwd = 2)
+text(0.1,MSYBtrigger_temp*1.15, expression(MSYB[trigger]) )
 
 
 # Standard deviation, σ, of ln(SSB) in the final assessment year
@@ -279,10 +280,10 @@ mean(ssb(stk)[, ac(2010:2019)])
 Bmsy0.8 <- Bmsy*0.8
 Bmsy0.5 <- Bmsy*0.5
 
-ratio_MSYBtrigger_Bmsy <- MSYBtrigger_theo/Bmsy
+ratio_MSYBtrigger_Bmsy <- MSYBtrigger_temp/Bmsy
 
 taf.png("report/potential_MSYBtrigger.png")
-barplot(c(Bpa = Bpa, q0.05_Bmsy = MSYBtrigger_theo,  q0.05_SSB2019 = SSB_p05, 
+barplot(c(Bpa = Bpa, q0.05_Bmsy = MSYBtrigger_temp,  q0.05_SSB2019 = SSB_p05, 
           `0.80*Bmsy` =  Bmsy0.8, `0.50*Bmsy` = Bmsy0.5), main = 'Potential MSY Btrigger values',
         ylab = 'tonnes')
 dev.off()
