@@ -185,12 +185,18 @@ bootstrapSR_list <- function (x, iters = 100, method = c("best", "logLik", "rela
       m <- match(models[best], c("bevholt", "ricker", "segreg"))
       fit <- fits[[best]]
       fit@desc <- c("bevholt", "ricker", "segreg")[m]
-      fit
-    #   rbind(params(fit), FLPar(m = m, spr0 = spr0x, logLik = llkhds[best]), 
-    #         FLPar(attr(fit, "SV")))
-     }
-#  params <- Reduce(combine, res)
+      list(fit = fit,
+      rbind(params(fit), FLPar(m = m, spr0 = spr0x, logLik = llkhds[best]), 
+             FLPar(attr(fit, "SV"))))    
+    }
+  # browser()
+  res1 <- lapply(1:length(res), function(i) res[[i]][[1]])
+  res2 <- lapply(1:length(res), function(i) res[[i]][[2]])
+  
+  res <- list(fits = res1, params = Reduce(cbind, res2))
+  
   return(res)
+  
 }
 
 
@@ -222,4 +228,73 @@ scenario_table <- function(settings, scenario_name, description){
   
   return(res)
   
+}
+
+
+# hindcast_srdevs: function to introduce uncertainty in the initial population
+hindcast_srdevs <- function(stock, srdevs, start, end, process_error = FALSE){ 
+  # The process error is the right one for the first year 'hy', but afterwards it needs to be 
+  # recalculated as the numbers at ages in years are corrected, so the population in year
+  # y included process error.
+  # perry <- perr
+  
+  start <- hy
+  end   <- dy
+  
+  y0 <- as.numeric(dimnames(stock@m)[[2]][1])
+  
+  A <- dim(stock@m)[1]
+  
+  #  * Add uncertainty in recruitment
+  for(y in hy:dy) rec(stock)[, ac(y)] <- rec(stock)[1, ac(y)] * srdevs[, ac(y)]
+  
+  # -- SIMPLE hindcast
+  dhind <- fwd(stock, sr=rec(stock), catch=catch(stock)[, ac(hy:dy)])
+  
+  
+  if(process_error == FALSE) return(dhind)
+  
+  # -- IF process_error => correct it.
+  
+  #  * Correcting for process error
+  #  First the process error is calculated deterministically using the SAM (or other) estimate 
+  #  and then it is used to correct the stochastic projection 
+  
+  # COMPUTE process error, e = y/(x exp(-z)) all ages except recruitment.
+  perr        <- stock.n(stock)[-1, ac(hy:dy)]/(stock.n(stock)[-A, ac((hy-1):(dy-1))] * 
+                                                  exp(-z(stock)[-A, ac((hy-1):(dy-1))]))
+  perr[A, ]   <- stock.n(stock)[A, ac(hy:dy)]/(quantSums(stock.n(stock)[(A-1):A, ac((hy-1):(dy-1))] * 
+                                                           exp(-z(stock)[(A-1):A, ac((hy-1):(dy-1))])))
+  # The process error is the right one for the first year 'hy', but afterwards it needs to be 
+  # recalculated as the numbers at ages in years are corrected, so the population in year
+  # y included process error.
+  # perry <- perr
+  
+  dhind_perr <- stock
+  
+  perry <- perr
+  for(y in seq(hy,dy)) {
+    
+    # FWD(catch[y])
+    dhind_perr <- fwd(dhind_perr, sr=rec(stk), f=fbar(stk)[, ac(y)])
+    
+    stock.n(dhind_perr)[-1, ac(y)] <- stock.n(dhind_perr)[-1, ac(y)]*perry[, ac(y)] 
+    
+    # perr for next year
+    if(y < dy){
+      # all ages - recruitment
+      perry[,ac(y+1)] <- stock.n(stk)[-1, ac(y+1)]/(stock.n(dhind_perr)[-A, ac(y)] * exp(-z(dhind_perr)[-A, ac(y)]))
+      # correct plusgroup
+      perry[A,ac(y+1)] <- stock.n(stk)[A, ac(y+1)]/(quantSums(stock.n(dhind_perr)[(A-1):A, ac(y)] *
+                                                                exp(-z(dhind_perr)[(A-1):A, ac(y)])))
+    }
+  }
+  
+  # Stochastic hindcast applying perry to account for the process error.
+  for(y in seq(hy,dy)) {
+    stock <- fwd(stock, sr=window(rec(stk), 1999,fy), f=fbar(stk)[, ac(y)], deviances = srdevs[, ac(y)])
+    
+    stock.n(stock)[-1, ac(y)]     <- stock.n(stock)[-1, ac(y)]*perry[, ac(y)] 
+  }
+  return(stock)
 }

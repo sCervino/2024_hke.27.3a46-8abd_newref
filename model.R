@@ -44,6 +44,8 @@ install_github("ices-tools-prod/msy")
 # Load data and reference points
 #load('data/data.rda')
 load("data/Biomass_refpts.rda")
+load("data/brps.rda")
+
 
 it <- 100
 
@@ -60,6 +62,16 @@ fy <- 2100
 
 bio.years <- c(2017,2021)
 sel.years <- c(2017,2021)
+
+# Vector of fishing mortalities used in eqSim to project the population.
+# The value of Fmsy is then calculated using some interpolation method.
+# The results can be sensitive to the values used, so the intervals should 
+# be narrow enough to estimate Fmsy accurately but not to narrow that 
+# results in very long computations.
+# We don't expect Fmsy to be higher than 1, but Fp.05 could be and if so,
+# the upper bound of the F sequence should be increased. 
+Fscan <- seq(0,1,length = 100)
+
 #### Proposed Blim based on previous analysis--- 
 Blim     <- Blim_segreg
   
@@ -74,6 +86,9 @@ mkdir("model")
 
 # Source utilities scripts with additional functions/utilities.
 source("utilities.R")
+# Source the modified version of eqsim_run
+source("utilities_eqsim_run_modified.R")
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -129,7 +144,7 @@ eqPop_Flim <- eqsim_run(sr_segreg,
                         Fcv = 0, Fphi = 0, SSBcv = 0,
                         rhologRec = rho_ar1,
                         Btrigger = 0, Blim = Blim, Bpa = Bpa,
-                        Nrun = 200, Fscan = seq(0,1.0,0.05), verbose = F)
+                        Nrun = 200, Fscan = Fscan, verbose = F)
 
 
 taf.png("report/eqsim_Flim.png")
@@ -153,19 +168,22 @@ phiF <- 0.423                                 # Default = 0.423
 cvSSB <- 0                                    # Default = 0
 phiSSB <- 0                                   # Default = 0
 
-eqPop_Fmsy <- eqsim_run(sr_fit,
+# we use the modified version to calculate the 35% and 45% quantiles 
+eqPop_Fmsy <- eqsim_run_mod(sr_fit,
                         bio.years = bio.years,
                         sel.years = sel.years,
                         Fcv=cvF, Fphi=phiF, SSBcv=cvSSB,
                         Btrigger = 0, Blim=Blim,Bpa=Bpa,
                         rhologRec = rho_ar1,
-                        Nrun=200, Fscan = seq(0,1,0.05),verbose=F)
+                        Nrun=200, Fscan = Fscan,verbose=F, keep.sims= TRUE,
+                        bootstrap = TRUE)
 
-
+# Temporal Fmsy, need to be compared with Fp05 and capped if needed.
 
 Fmsy_tmp <- round(eqPop_Fmsy$Refs2["lanF","medianMSY"],3)
-
-
+Fmsyp35  <- eqPop_Fmsy$p35$Fmsyp35L 
+Fmsyboot <- quantile(eqPop_Fmsy$bootstrap$FmsyMedianL_boot, seq(0.05,0.45, 0.05)) 
+  
 taf.png("report/eqsim_Fmsy.png")
 eqsim_plot_range(eqPop_Fmsy, type="median")
 dev.off()
@@ -233,7 +251,7 @@ eqPop_Fp05_AR <- eqsim_run(sr_fit,
                            Fcv=cvF, Fphi=phiF, SSBcv=cvSSB,
                            Btrigger = MSYBtrigger, Blim=Blim,Bpa=Bpa,
                            rhologRec = rho_ar1,
-                           Nrun=200, Fscan = seq(0,1,0.05),verbose=F)
+                           Nrun=200, Fscan = Fscan,verbose=F)
 
 Fp05_AR <- eqPop_Fp05_AR$Refs2["catF","F05"]
 
@@ -258,7 +276,7 @@ Fmsy <- ifelse(Fmsy_tmp < Fp05_AR, Fmsy_tmp, Fp05_AR)
 # Bmsy corresponding to Fmsy in the equilibrium analysis but without
 # introducing assessment error in the simulation. (i.e eqPop_Flim)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Fscan <- seq(0,1,0.05)
+
 SSBFscan_p50 <- eqPop_Flim$rbp$p50[eqPop_Flim$rbp$variable=="Spawning stock biomass"]
 ## Interpolate to get SSB for more F values, percentile 50 of SSB for (SSB,F) pairs. 
 SSBF_p50 <- as.data.frame(approx(Fscan,                             # The F-s for which we have F
@@ -288,6 +306,37 @@ barplot(c(Bpa = Bpa, q0.05_Bmsy = MSYBtrigger_temp,  q0.05_SSB2019 = SSB_p05,
         ylab = 'tonnes')
 dev.off()
 
-
 save(B0, Blim, Blim_segreg, Blim_segreg_boot, Bmsy, Bmsy0.5, Bmsy0.8, Bpa, Flim , Fmsy, Fp05_AR, Fp05_NAR, 
      MSYBtrigger, file = 'model/refpts.RData')
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#### 6.  Define the GRID of [Btrigger, Ftarget]   ----
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Frp <- brps %>% group_by(refpt, quant) %>% summarize_at('data', median) %>% filter(quant == 'harvest')
+Brp <- brps %>% group_by(refpt, quant) %>% summarize_at('data', median) %>% filter(quant == 'biomass')
+
+Bmsy_dist <- eqPop_Fmsy$bootstrap$BmsyMedianL_boot
+
+# In this case only Fspr35 makes sense, spr.30 is very close to Fmsy
+# Fmax is higher and the rest are much lower.
+
+Fs <- c(Fmsy   = Fmsy, 
+        Fspr35 = Frp[Frp$refpt == 'Fspr35',]$data,
+        Fspr40 = Frp[Frp$refpt == 'Fspr40',]$data,
+        f0.1   = Frp[Frp$refpt == 'Fspr40',]$data,
+        Fmsy0.80   = Fmsy*0.80)
+
+Bs <- c(MSYBtrigger = MSYBtrigger,
+            Blim1.4 = 1.4*Blim,
+            Bmsy.80 = 0.80*median(Bmsy),
+            B0.30   = 0.30*median(B0))
+
+MSYBtriggerF_grid <- expand.grid(Ftarget = Fs, MSYBtrigger = Bs)
+
+nms <- expand.grid(Ftarget = names(Fs), MSYBtrigger = names(Bs))
+
+row.names(MSYBtriggerF_grid) <- paste(nms[,1], nms[,2], sep = "_")
+
+save(MSYBtriggerF_grid, MSYBtrigger, Fmsy, B0, Blim, Blim_segreg,  Blim_segreg_boot, Bmsy, Bmsy_dist,  Bmsy0.5, Bmsy0.8,
+     Bpa, Flim, Fmsy, Fmsyboot, Fmsyp35, Fp05_AR, Fp05_NAR, file = 'model/ICES_RefPts.RData' )

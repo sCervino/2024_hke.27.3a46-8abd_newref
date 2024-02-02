@@ -36,6 +36,8 @@ library(ggthemes)  # Themes for ggplot
 
 # Some extra utilities:bootstrapSR_list
 source('utilities.R')
+# Code to test if the stock is spasmodic
+source('utilities_spasmodic.R')
 #### Load the FLStock object ---- 
 load('bootstrap/data/wgbie2023_nhke_FLStock_csim.RData')
 # Rename the object
@@ -180,11 +182,60 @@ stats_brkpt[2,] <- c(mean(segreg_1yrOut[2,]), median(c(segreg_1yrOut[2,])),
 
 
 #### Bootstrap of 3 SR model and  selection of the model by largest logLik ----
-mixedSR_boot <- bootstrapSR_list(stk, iters=it, models=c("ricker", "bevholt", 'segreg'), method="best")
+mixedSR_boot_all <- bootstrapSR_list(stk, iters=it, models=c("ricker", "bevholt", 'segreg'), method="best")
+mixedSR_boot <- mixedSR_boot_all[[1]]
+mixedSR_boot_params <- mixedSR_boot_all[[2]]
+
 table(sapply(mixedSR_boot, function(x) slot(x, 'desc')))
 
+
 #### Save SR fits ----
-save(sr.fits, segreg_boot, mixedSR_boot, stats_brkpt, file="data/SR_analysis.rda", compress="xz")
+save(sr.fits, segreg_boot, mixedSR_boot_params, mixedSR_boot, stats_brkpt, file="data/SR_analysis.rda", compress="xz")
+
+
+#### ** 1.c Is the stock spasmodic? ** ----
+
+ssbrec_df <- as_tibble(as.data.frame(ssb(stk))[, c('year', 'data')]) %>% mutate(rec = rec(stk)[drop=T]) %>% 
+       filter(year < 2020)
+names(ssbrec_df)[2] <- 'ssb'
+
+## Raw recruitment, not detrended
+
+## ecdf of recruitment scaled to maximum
+ecdf_scaled <- ecdf_fn(ssbrec_df$rec/max(ssbrec_df$rec))
+
+## simulation )takes some time)
+bounds <- get_bounds(n = nrow(ssbrec_df), sd = 1, alpha = 0.2, m = 1e4)
+
+## Detrended recruitment
+# remove longterm low frequency variability with a loess filter
+
+ssbrec_df$lnR <- log(ssbrec_df$rec)
+
+fit <- loess(lnR ~ year, span = 0.3, data = ssbrec_df)
+
+with(ssbrec_df, plot(year, lnR, bty = "l"))
+lines(fit$x, fit$fitted)
+
+## multiplicateve residuals around long term trend
+mres <- exp(residuals(fit))
+
+## ecdf of detrended and scaled residuals 
+ecdf_detrend <- ecdf_fn(mres/max(mres))
+
+## plot all
+taf.png("report/spasmodic_recruitment.png")
+plot(ecdf_scaled, main = "Cumulative distribution functions",
+     type = "s", bty = "l", lty = 2,
+     xlab = "Scaled recruitment", ylab = "Cumulative probability",
+     xlim = c(0, 1), col = "navy", lwd = 1.5)
+lines(ecdf_detrend, col = "navy", lwd = 1.5, type = "s")
+polygon(c(bounds$x, rev(bounds$x)), c(bounds$lwr, rev(bounds$upr)), col = "#FF7F5060", border = "red")
+legend("bottomright", legend = c("Detrended CDF", "Scaled CDF", "'Spasmodic' region"), lty = c(1, 2, NA),
+       pch = c(NA, NA, 15),
+       lwd = c(1.5, 1.5, NA),
+       col = c("navy", "navy", "#FF7F5060"), bty = "n")
+dev.off()
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
