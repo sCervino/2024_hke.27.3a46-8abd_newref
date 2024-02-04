@@ -4,7 +4,7 @@
 # Author: Dorleta Garcia 2024-01-30 (ICES/AZTI) <dorleta.garcia@ices.dk>
 #                                               <dgarcia@azti.es>
 
-
+library(FLCore)
 library(tidyverse)
 library(icesTAF)
 library(mse)
@@ -15,30 +15,54 @@ mkdir("output")
 
 # LOAD model.R outputs
 
+#### Load the FLStock object ---- 
+load('bootstrap/data/wgbie2023_nhke_FLStock_csim.RData')
+# Rename the object
+stk <- hke.stk
+
 load('model/robustness_test.RData')
 load("data/Biomass_refpts.rda")
-
+load("data/SR_analysis.rda")
+load('data/brps.rda')
+load('model/ICES_RefPts.RData') 
 
 it <- 500
 
 iy <- 2022
 fy <- 2050
 
-short  <- iy:(iy+4)
+short  <- iy+1
+medium <- iy+5
 long   <- (fy-10):(fy-1)
 
 
-
+stknm <- 'hke.27.3a46-8abd'
 
 
 #### Join all the simulations in one: sims ----
 
 sims <- c(lowProd = AR_lowProd, Grid = ARSims, MSYBtrigger = AR_MSYBtrigger)
 
+
+# Add SSB to the list of indicators reported by default.
+annualstats$SSB <- list() 
+annualstats$SSB[[1]] <- formula(~iterMedians(SB))
+annualstats$SSB[['name']] <- 'SSB'
+annualstats$SSB[['desc']] <- 'Spawning Stock Biomass'
+
+# Add F to the list of indicators reported by default.
+annualstats$F <- list() 
+annualstats$F[[1]] <- formula(~iterMedians(F))
+annualstats$F[['name']] <- 'F'
+annualstats$F[['desc']] <- 'Fishing mortality'
+
+
 #### Calculate performance statistics: perf ----
 perf_year <- performance(sims, statistics=annualstats, year = iy:(fy-1))
 
-perf_stlt <- performance(sims, statistics=annualstats, years=list(short=short, long = long))
+perf_stlt <- performance(sims, statistics=annualstats, years=list(short=short, medium = medium, long = long))
+
+
 
 #### TABLES ----
 
@@ -48,17 +72,26 @@ tables <- list()
 tables$pBlim <- perf_year[statistic == "PBlim",]
 
 # Which `p(SSB < Blim) > 5%`
-tables$pBlim <- perf_year[statistic == "PBlim" & data <= 0.95, .SD[1], 
-                          by=mp][order(year),]
+aux <- perf_year[statistic == "PBlim",] 
+aux[,'statistic'] <- 'pBlim_0.05'
+aux$data <- aux[,"data"] <=0.05
 
 # CREATE table of catch by mp and year (mp ~ year | C)
-
 tables$catch <- dcast(perf_year[statistic == 'C', .(data=mean(data)), by=.(year, mp, name, desc)], mp ~ year, value.var='data')
+
+# CREATE table of SSB by mp and year (mp ~ year | C)
+tables$SSB <- dcast(perf_year[statistic == 'SSB', .(data=mean(data)), by=.(year, mp, name, desc)], mp ~ year, value.var='data')
+
+# CREATE table of SSB by mp and year (mp ~ year | C)
+tables$F <- dcast(perf_year[statistic == 'F', .(data=mean(data)), by=.(year, mp, name, desc)], mp ~ year, value.var='data')
+
 
 # CREATE table of all statistics by mp and year (statistic + mp ~ year)
 
 tables$stats_mp <- dcast(perf_year[, .(data=mean(data)),
                                    by=.(year, mp, name, desc)], name + mp ~ year, value.var='data')
+
+
 
 # 
 # # Table to compare [MSY Btrigger, Fmsy] pairs in terms of: risk, ssb/MSYBtrigger and catch/Fmsy[catch]
