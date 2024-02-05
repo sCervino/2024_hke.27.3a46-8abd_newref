@@ -326,6 +326,39 @@ save(Blim_segreg_boot, Blim_segreg, B0, Bmsy, file="data/Biomass_refpts.rda", co
 Fref_med <- brps %>% filter(quant == 'harvest') %>% group_by(refpt, quant) %>% 
   summarize_at('data', median)
 
+
+
+#### Distribution of F for different reference points ----
+
+
+sd((brps %>% filter(refpt == 'msy', quant == 'harvest', model == 'segreg'))$data)/
+mean(((brps %>% filter(refpt == 'msy', quant == 'harvest', model == 'segreg'))$data))
+
+sd((brps %>% filter(refpt == 'msy', quant == 'biomass', model == 'segreg'))$data)/
+  mean(((brps %>% filter(refpt == 'msy', quant == 'biomass', model == 'segreg'))$data))
+
+sd((brps %>% filter(refpt == 'msy', quant == 'harvest', model == 'bevholt'))$data)/
+  mean(((brps %>% filter(refpt == 'msy', quant == 'harvest', model == 'bevholt'))$data))
+
+sd((brps %>% filter(refpt == 'msy', quant == 'biomass', model == 'bevholt'))$data)/
+  mean(((brps %>% filter(refpt == 'msy', quant == 'biomass', model == 'bevholt'))$data))
+
+
+
+p1 <- ggplot(brps %>% filter(quant == 'harvest'), aes(data,fill = refpt, alpha = 0.3)) + 
+  geom_density( colour = 'white') +
+  scale_fill_manual(values = c(brewer.pal(8,'Dark2'), 'black')) + xlab(NULL)+ 
+  theme(plot.margin=unit(c(1,1,0,1), "cm")) + theme_hc()
+
+p1 <- ggplotGrob(p1) 
+p2<-tableGrob(SSBrpRel2B0) 
+
+taf.png("report/Biomas_ReferencePoints.png")
+grid.arrange(p1, p2, top = "Boostrapped SRR: SSB")
+dev.off()
+
+
+
 p1 <- ggplot(brps %>% filter(quant == 'harvest'), aes(refpt, data, fill = refpt)) + geom_boxplot() + 
   ggtitle('Boostrapped SRR: F') + 
   geom_point(data = Fref_med, aes(color = refpt, size = 2)) +

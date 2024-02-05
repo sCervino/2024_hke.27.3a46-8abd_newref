@@ -54,7 +54,33 @@ stknm <- 'hke.27.3a46-8abd'
 #### Reporting TABLE ----
 #------------------------------------------------------~~~~~~~~~~~~~~~~
 
+# Stock recruitment models
 srmods <- table(sapply(mixedSR_boot, function(x) x@desc))/length(mixedSR_boot)
+aux <- as.data.frame(mixedSR_boot_params)
+rk_iters <- aux %>% filter(aa$params == 'm', aa$data == 2) %>% select(iter)
+sr_iters <- aux %>% filter(aa$params == 'm', aa$data == 3) %>% select(iter)
+bh_iters <- aux %>% filter(aa$params == 'm', aa$data == 1) %>% select(iter)
+
+# spawning per recruit in the absence of fishing.
+sprf0 <- spr0(stk)
+
+# R0 and B0 from Ricker model
+rk_params <- apply(mixedSR_boot_params[c('a', 'b'),rk_iters$iter],1, median)[drop=T]
+rk_B0 <- log(rk_params['a'] * sprf0) / rk_params['b'] 
+rk_R0 <- rk_params['a']  * rk_B0 * exp(-rk_params['b']  * rk_B0)
+
+# R0 and B0 from Beverton-Holt model
+## R = a * S / (b + S)
+bh_params <- apply(mixedSR_boot_params[c('a', 'b'),bh_iters$iter],1, median)[drop=T]
+bh_B0 <- bh_params['a'] * sprf0 - bh_params['b']
+bh_R0 <- bh_params['a'] * S0 / (bh_params['b'] + S0)
+
+# R0 and B0 from Segmented regression model
+## R = a * S / (b + S)
+sr_params <- apply(mixedSR_boot_params[c('a', 'b'),sr_iters$iter],1, median)[drop=T]
+sr_R0 <- prod(sr_params)
+sr_B0 <- NA
+
 
 reference_points_table <- data.frame(
   stock                 = stknm,
@@ -73,10 +99,10 @@ reference_points_table <- data.frame(
   BP_segreg_ok          = TRUE,
   BP_segrreg_explain    = "Breakpoint sensitive to the exclusion of annual data", 
   SR_stock_assessment   = FALSE,
-  R0_sr                 = ,
-  R0_bh                 = ,
-  R0_rk                 =
-    R0_ok                 = TRUE,
+  R0_sr                 = sr_R0,
+  R0_bh                 = bh_R0,
+  R0_rk                 = rk_B0,
+  R0_ok                 = TRUE,
   R0_explain            = "Asymptote well estimated based on high recruitments at high biomass levels",
   B0                    = median(B0),
   B0_ok                 = TRUE, 

@@ -137,7 +137,7 @@ om_red@stock <- fwd(om_red@stock, sr=rec(om_red@stock), fbar=fbar(om_red@stock)[
 ssb(om_red@stock)[, '2022']/MSYBtrigger
 
 # 2. Test the performance of the AR.
-system.time(AR_MSYBtrigger <- mp(om, iem=iem, ctrl= AR, args=mseargs))
+system.time(AR_MSYBtrigger <- mp(om_red, iem=iem, ctrl= AR, args=mseargs))
 
 plot(AR_MSYBtrigger, window=FALSE)
 
@@ -147,11 +147,11 @@ plot(AR_MSYBtrigger, window=FALSE)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # In the case of HKE we will take [1990, 2003] period to condition the SR 
 # relationship.
-# We will maintain the same breapoint, but condition the mean recruitment
-# using mean recruitment in this period.
-# Other approaches could be valid.
+# We have to run two scenarios:
+#    4.a) Low productivity in the OM + Reference Points based on historical productivity 
+#    4.b) Historical productivity in the OM + Reference Points based on low productivity.
 
-#### Bootstrap of 3 SR model and  selection of the model by largest logLik ----
+#### *** 4.a) OM[Low productivity] + RefPts[Historical productivity]    *** ----
 stk_low <- stk[,ac(1990:2003)]
 sr.fits     <- srrTMB(as.FLSRs(stk_low, models=c("segreg", "ricker", "bevholt")), spr0=mean(spr0y(stk)))
 plot(sr.fits)
@@ -165,12 +165,36 @@ table(sapply(mixedSR_low_boot, function(x) slot(x, 'desc')))
 om_lowProd <- om
 om_lowProd@sr@params <- om_lowProd@sr@params[c('a', 'b', 'm'),]
 
-system.time(AR_lowProd <- mp(om_lowProd, iem=iem, ctrl= AR, args=mseargs))
+system.time(AR_OMlowProd <- mp(om_lowProd, iem=iem, ctrl= AR, args=mseargs))
 
-plot(AR_lowProd, window=FALSE)
+plot(AR_OMlowProd, window=FALSE)
+
+#### *** 4.b) OM[Historical productivity] + RefPts[Low productivity]    *** ----
+# Set up the AR for the regimen with low productivity.
+# In this example we set up some hypothetical reference points dividing 
+# Blim and MSYBtrigger by 2.
+MSYBtrigger_lowProd <- 55000
+Fmsy_lowProd <- 0.27
+AR_lowProd <- mpCtrl(list(
+  
+  # (est)imation method: shortcut.sa + SSB deviances
+  est = mseCtrl(method=shortcut.sa,
+                args=list(SSBdevs=sdevs$SSB)),
+  
+  # hcr: hockeystick (fbar ~ ssb | lim, trigger, target, min)
+  hcr = mseCtrl(method=hockeystick.hcr,
+                args=list(lim=0, trigger=MSYBtrigger_lowProd, target=Fmsy_lowProd,
+                          min=0, metric="ssb", output="fbar")),
+  
+  # (i)mplementation (sys)tem: tac.is (C ~ F) + F deviances
+  isys = mseCtrl(method=tac.is,
+                 args=list(recyrs=-2, fmin=0, Fdevs=sdevs$F))
+))
+
+system.time(ARlowProd_OMHistProd <- mp(om, iem=iem, ctrl= AR_lowProd, args=mseargs))
 
 
-save(ARSims, AR_MSYBtrigger, AR_lowProd, file = 'model/robustness_test.RData' )
+save(ARSims, AR_MSYBtrigger, AR_lowProd, ARlowProd_OMHistProd, file = 'model/robustness_test.RData' )
 # CLOSE cluster
 plan(sequential)
 
