@@ -122,13 +122,13 @@ rho_ar1 <- coef(lm(resid[-1] ~ resid[-length(resid)]-1))
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # If the standard error of the SSB calculated by the stock assessment model in 
 # the last year is bigger that 0.2 
-#     Bpa <- Blim*exp(-1.645*sigma)
+#     Bpa <- Blim*exp(1.645*sigma)
 #  Otherwise:
 #     Bpa <- 1.4*Blim 
 Bpa <- Blim*1.4
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#### 2.  Equilibrium analysis to calculate ** Flim**  ----
+#### 3.  Equilibrium analysis to calculate ** Flim**  ----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #  *** ICES guidelines ***
 # Simulate a stock with a segmented regression S–R relationship, 
@@ -154,7 +154,7 @@ dev.off()
 Flim <- round(eqPop_Flim$Refs2['catF','F50'],3)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#### 3.  Equilibrium analysis to calculate ** Fmsy ** ----
+#### 4.  Equilibrium analysis to calculate ** Fmsy ** ----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # In this case the stock-recruitment relationship is the one that comes from the
 # best stock-recruitment model in each of the bootstrap iterations.
@@ -178,6 +178,7 @@ eqPop_Fmsy <- eqsim_run_mod(sr_fit,
                         Nrun=200, Fscan = Fscan,verbose=F, keep.sims= TRUE,
                         bootstrap = TRUE)
 
+
 # Temporal Fmsy, need to be compared with Fp05 and capped if needed.
 
 Fmsy_tmp <- round(eqPop_Fmsy$Refs2["lanF","medianMSY"],3)
@@ -190,7 +191,7 @@ dev.off()
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#### 4.  MSY Btrigger ----
+#### 5.  MSY Btrigger ----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Definition: A lower bound of the expected range of the point at which SSB is   
 #      reduced when the stock is fished at Fmsy applying the ICES MSY advice rule (AR). 
@@ -209,7 +210,17 @@ dev.off()
 
 # Theoretical MSY Btrigger based on equilibrium values.
 #  Interpolate equilibrium values in the 5% quantile.
-dbEq_Fmsy <- eqPop_Fmsy$rbp
+eqPop_Fmsy_NoAssErr <- eqsim_run_mod(sr_fit,
+                            bio.years = bio.years,
+                            sel.years = sel.years,
+                            Fcv=0, Fphi=0, SSBcv=0,
+                            Btrigger = 0, Blim=Blim,Bpa=Bpa,
+                            rhologRec = rho_ar1,
+                            Nrun=200, Fscan = Fscan,verbose=F, keep.sims= TRUE,
+                            bootstrap = TRUE)
+
+
+dbEq_Fmsy <- eqPop_Fmsy_NoAssErr$rbp
 Fs     <- dbEq_Fmsy[dbEq_Fmsy$variable == "Spawning stock biomass", ]$Ftarget
 ssb.05 <- dbEq_Fmsy[dbEq_Fmsy$variable == "Spawning stock biomass", ]$p05
 
@@ -234,7 +245,7 @@ SSB_p05 <- exp(qnorm(0.05, log(ssb(stk)[, '2019']), 0.147))
 
 MSYBtrigger <- max(Bpa, MSYBtrigger_temp)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#### 5.   Fp.05 = Fpa ----
+#### 6.   Fp.05 = Fpa ----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Definition: An exploitation rate reference point below which exploitation is 
 #     considered to be sustainable, having accounted for estimation uncertainty. 
@@ -267,17 +278,18 @@ dev.off()
 Fp05_NAR <- eqPop_Fmsy$Refs2["catF","F05"]
 
 #### Final Fmsy ----
-Fmsy <- ifelse(Fmsy_tmp < Fp05_AR, Fmsy_tmp, Fp05_AR)
-
+Fmsy_newref       <- ifelse(Fmsy_tmp < Fp05_NAR, Fmsy_tmp, Fp05_NAR)
+Fmsy_ICES_current <- ifelse(Fmsy_tmp < Fp05_AR, Fmsy_tmp, Fp05_AR)
+Fmsy <- Fmsy_newref
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#### 6.  Equilibrium analysis to calculate ** Bmsy **  ----
+#### 7.  Equilibrium analysis to calculate ** Bmsy **  ----
 # *** ICES guidelines ***^
 # Bmsy corresponding to Fmsy in the equilibrium analysis but without
 # introducing assessment error in the simulation. (i.e eqPop_Flim)
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-SSBFscan_p50 <- eqPop_Flim$rbp$p50[eqPop_Flim$rbp$variable=="Spawning stock biomass"]
+SSBFscan_p50 <- eqPop_Fmsy_NoAssErr$rbp$p50[eqPop_Fmsy_NoAssErr$rbp$variable=="Spawning stock biomass"]
 ## Interpolate to get SSB for more F values, percentile 50 of SSB for (SSB,F) pairs. 
 SSBF_p50 <- as.data.frame(approx(Fscan,                             # The F-s for which we have F
                                  SSBFscan_p50,                      # The p50 SSB-s corresponding to Fscan
@@ -316,7 +328,7 @@ save(B0, Blim, Blim_segreg, Blim_segreg_boot, Bmsy, Bmsy0.5, Bmsy0.8, Bpa, Flim 
 Frp <- brps %>% group_by(refpt, quant) %>% summarize_at('data', median) %>% filter(quant == 'harvest')
 Brp <- brps %>% group_by(refpt, quant) %>% summarize_at('data', median) %>% filter(quant == 'biomass')
 
-Bmsy_dist <- eqPop_Fmsy$bootstrap$BmsyMedianL_boot
+Bmsy_dist <- eqPop_Fmsy_NoAssErr$bootstrap$BmsyMedianL_boot
 
 # In this case only Fspr35 makes sense, spr.30 is very close to Fmsy
 # Fmax is higher and the rest are much lower.
