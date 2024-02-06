@@ -16,6 +16,10 @@
 # The rest of the packages are available in CRAN
  # install.packages(c("FLCore",  "FLBRP", "Flasher", "mse", "FLSRTMB", "FLRef"),
  #                  repos = c('https://flr.r-universe.dev'))
+ devtools::install_github("mebrooks/stockrecruit/StockRecruitSET", build_opts = c("--no-resave-data", "--no-manual")) 
+
+
+
 
 #### Load libraries ----
 # FLR related packages
@@ -33,6 +37,8 @@ library(gridExtra) # arrange multiple plots in a page
 library(ggpubr)    #  provides some easy-to-use functions for creating and customizing 'ggplot2'
 library(ggExtra)   # Marginal histograms
 library(ggthemes)  # Themes for ggplot
+# Mollie's library to estimate SRR and Blim with empirical rules.
+library(StockRecruitSET)
 
 # Some extra utilities:bootstrapSR_list
 source('utilities.R')
@@ -98,7 +104,7 @@ segreg_finalYr <- matrix(NA,2, 10, dimnames = list(c('a', 'b'), (dy-10+1):dy))
 
 for(y in (dy-10+1):dy){
   
-  temp <- srrTMB(as.FLSRs(window(stk, y0, y), models=c("segreg")), spr0=mean(spr0y(stk)))
+  temp <- srrTMB(as.FLSRs(window(stk, y0, y), models=c("segreg")), spr0= mean(spr0y(stk)[, (length(yrs)-5):length(yrs)]))
   
   segreg_finalYr[, ac(y)] <- c(temp[[1]]@params)[1:2]
 }
@@ -122,7 +128,7 @@ for(i in 1:dim(stk)[2]){
   if(i %in% 2:dim(stk)[2]) subs <- c(1:(i-1), (i+1):dim(stk)[2])
   if(i == dim(stk)[2])     subs <- 1:(dim(stk)[2]-1)
   
-  temp <- srrTMB(as.FLSRs(stk[,subs], models=c("segreg")), spr0=mean(spr0y(stk)))
+  temp <- srrTMB(as.FLSRs(stk[,subs], models=c("segreg")), spr0= mean(spr0y(stk)[, (length(yrs)-5):length(yrs)]))
   
   segreg_1yrOut[, i] <- c(temp[[1]]@params)[1:2]
 }
@@ -139,7 +145,7 @@ dev.off()
 
 #### Deterministic fit ----
 sr.fits     <- srrTMB(as.FLSRs(window(stk, recy[1], recy[length(recy)]), 
-                               models=c("segreg", "ricker", "bevholt")), spr0=mean(spr0y(stk)))
+                               models=c("segreg", "ricker", "bevholt")), spr0= mean(spr0y(stk)[, (length(yrs)-5):length(yrs)]))
 
 Blim_segreg <- sr.fits$segreg@params$b[drop=T]
 
@@ -242,18 +248,27 @@ dev.off()
 #### 2. Calculate reference points using FLRef library ----
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#### Create the FLStock to calculate the BRPs ----
+# As computeFbrps does not allow to select the years for the calculation of 
+# reference points (it uses last 3 years mean), we do a trick to use the
+# mean of the time period we are interested it. 
+# We take this time period, calculate the means, and the use this mean 
+# in and FLStock with 3 years.
+stk_brp <- window(qapply(window(stk, 2022-4, 2022), function(x) yearMeans(x)),1,3)
+stk_brp[,2:3] <- stk_brp[,1]
+
+
 #### Compute **deterministic reference points** from the 3 deterministic SR relationships ----
 aux <- lapply(sr.fits, 
-                function(x) computeFbrps(stock = stk, sr = x, proxy = 'sprx', f0.1 = TRUE, verbose = FALSE))
+                function(x) computeFbrps(stock = stk_brp, sr = x, proxy = 'sprx', f0.1 = TRUE, verbose = FALSE))
 
 # Reshape the reference points calculated in previous step in a data frame format.
 brps_det <- as_tibble(Reduce(rbind, lapply(1:3, function(i) cbind(as.data.frame(aux[[i]]@refpts[-c(1, 3,7, 12)][,1:5])[,-3], 
-                                                        
                                                                model = names(sr.fits)[i]))))
 
 #### Compute **stochastic reference points** from the bootstrapped mixed stock-recruitment relationship ----
 brps_objs <- lapply(mixedSR_boot, 
-               function(x) computeFbrps(stock = stk, sr = x, proxy = 'sprx', f0.1 = TRUE, verbose = FALSE))
+               function(x) computeFbrps(stock = stk_brp, sr = x, proxy = 'sprx', f0.1 = TRUE, verbose = FALSE))
 
 brps <- as_tibble(Reduce(rbind, lapply(1:it, function(i) cbind(as.data.frame(brps_objs[[i]]@refpts[-c(1, 3,7, 12)][,1:5])[,-3], 
                                               iter = i,
@@ -309,14 +324,27 @@ taf.png("report/Historical_SSB_&_B0_Blim_Bmsy.png")
 hist(B0/max(ssb(stk)), main = 'B0/max(SSB)', xlab = "")
 dev.off()
 
-save(Blim_segreg_boot, Blim_segreg, B0, Bmsy, file="data/Biomass_refpts.rda", compress="xz")
-
+Blim_B0 <- median(B0)*0.15
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#### 4.  Calculate Blim using data driven approaches ---- 
+#### 4.  Calculate Blim using an empirical approach---- 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## FLSR object
+flsr <- as.FLSR(stk)
+S <- an(ssb(flsr))
+R <- an(rec(flsr))
 
+# Minimum SSB level that resulted in a recruitment higher that the median.
+# In this case it corresponds with Bloss.
+Blim_emp <- calcBlim(S, R, quant = 0.5, type = 1)
 
+png("report/Blim_empirical.png", units = "in", res = 300, height = 6, width = 8)
+plot(S, R, xlim = c(0, max(S)), ylim = c(0, max(R)), bty = "l", cex = 1.5)
+abline(v = Blim_emp)
+abline(h = median(R))
+dev.off()
+
+save(Blim_segreg_boot, Blim_segreg, B0, Bmsy, Blim_emp, file="data/Biomass_refpts.rda", compress="xz")
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -375,4 +403,6 @@ p2 <- plot(fbar(stk)) + geom_line(linewidth = 1.5) +
 taf.png("report/Historical_F_&_YPR_DetFrp.png")
 grid.arrange(p1, p2)
 dev.off()
+
+
 
